@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { getRuntimeConfig } from "../lib/config";
 
 const getGeminiClient = () => {
@@ -6,7 +6,7 @@ const getGeminiClient = () => {
   const apiKey = config.VITE_GEMINI_API_KEY;
   
   if (!apiKey) {
-    throw new Error('Nexus Intelligence API key is not set. Please configure the required environment variable.');
+    throw new Error('Nexus Intelligence API key is not set. Please configure VITE_GEMINI_API_KEY in your .env file.');
   }
   
   return new GoogleGenAI({ apiKey });
@@ -19,64 +19,44 @@ export const analyzeSituation = async (input: string, retryCount = 0): Promise<a
   const MAX_RETRIES = 3;
   
   try {
-    const model = ai.getGenerativeModel({ 
+    const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
-      systemInstruction: `You are Nexus Intelligence, a universal bridge between human intent and complex systems. 
-      Your goal is to take messy, unstructured real-world inputs and convert them into structured, verified, and life-saving actions.
-      
-      Output your analysis in the following JSON format:
-      {
-        "situation": "A concise summary of the situation",
-        "confidence": number (0-100),
-        "priority": "High" | "Medium" | "Low",
-        "actions": [
-          {
-            "id": number,
-            "title": "Action title",
-            "status": "RECOMMENDED" | "READY" | "PENDING",
-            "description": "Short description",
-            "instructions": ["Step 1", "Step 2"],
-            "actionText": "Button text",
-            "icon": "call" | "info" | "check"
-          }
-        ],
-        "impactProjection": "A short projection of the impact of these actions"
-      }`
-    });
-
-    const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: input }] }],
-      generationConfig: {
+      config: {
+        systemInstruction: `You are Nexus Intelligence, a universal bridge between human intent and complex systems. 
+      Your goal is to take messy, unstructured real-world inputs and convert them into structured, verified, and life-saving actions.`,
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
+        responseJsonSchema: {
+          type: "object",
           properties: {
-            situation: { type: Type.STRING },
-            confidence: { type: Type.NUMBER },
-            priority: { type: Type.STRING },
+            situation: { type: "string" },
+            confidence: { type: "number" },
+            priority: { type: "string", enum: ["High", "Medium", "Low"] },
             actions: {
-              type: Type.ARRAY,
+              type: "array",
               items: {
-                type: Type.OBJECT,
+                type: "object",
                 properties: {
-                  id: { type: Type.NUMBER },
-                  title: { type: Type.STRING },
-                  status: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  instructions: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  actionText: { type: Type.STRING },
-                  icon: { type: Type.STRING }
-                }
+                  id: { type: "number" },
+                  title: { type: "string" },
+                  status: { type: "string", enum: ["RECOMMENDED", "READY", "PENDING"] },
+                  description: { type: "string" },
+                  instructions: { type: "array", items: { type: "string" } },
+                  actionText: { type: "string" },
+                  icon: { type: "string", enum: ["call", "info", "check", "alert"] }
+                },
+                required: ["id", "title", "status", "description", "instructions", "actionText", "icon"]
               }
             },
-            impactProjection: { type: Type.STRING }
-          }
+            impactProjection: { type: "string" }
+          },
+          required: ["situation", "confidence", "priority", "actions", "impactProjection"]
         }
       }
     });
 
-    const response = await result.response;
-    const text = response.text();
+    const text = response.text;
+    if (!text) throw new Error("Empty response from Nexus Intelligence");
     return JSON.parse(text);
   } catch (error: any) {
     console.warn(`Nexus Intelligence attempt ${retryCount + 1} failed:`, error.message);

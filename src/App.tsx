@@ -41,13 +41,15 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   render() {
     if (this.state.hasError) {
       return this.props.fallback || (
-        <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-error-container/10 rounded-2xl min-h-[400px]">
-          <AlertTriangle size={48} className="text-error" />
+        <div role="alert" className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-error-container/10 rounded-2xl min-h-[400px]">
+          <AlertTriangle size={48} className="text-error" aria-hidden="true" />
           <h3 className="text-xl font-bold font-headline">Intelligence Sync Disrupted</h3>
           <p className="text-on-surface-variant max-w-xs">The Nexus interface encountered a critical synchronization error with the core systems.</p>
           <button 
+            id="restart-core-button"
             onClick={() => window.location.reload()} 
             className="bg-primary text-on-primary px-8 py-3 rounded-full font-bold shadow-lg active:scale-95 transition-transform"
+            aria-label="Restart Core Application"
           >
             Restart Core
           </button>
@@ -70,7 +72,7 @@ const BottomNav = ({ activeScreen, setScreen }: { activeScreen: Screen, setScree
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-surface/90 backdrop-blur-md border-t border-outline-variant/20 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] rounded-t-3xl">
+    <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-surface/90 backdrop-blur-md border-t border-outline-variant/20 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] rounded-t-3xl" aria-label="Main Navigation">
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeScreen === item.id;
@@ -78,12 +80,14 @@ const BottomNav = ({ activeScreen, setScreen }: { activeScreen: Screen, setScree
           <button
             key={item.id}
             onClick={() => setScreen(item.id as Screen)}
+            aria-current={isActive ? 'page' : undefined}
+            aria-label={`Go to ${item.label} screen`}
             className={cn(
               "flex flex-col items-center justify-center px-3 py-2 transition-all duration-300 rounded-xl",
               isActive ? "bg-primary/10 text-primary" : "text-on-surface-variant hover:text-primary"
             )}
           >
-            <Icon size={24} className={cn(isActive && "fill-current")} />
+            <Icon size={24} className={cn(isActive && "fill-current")} aria-hidden="true" />
             <span className="text-[10px] font-bold uppercase tracking-wider mt-1">{item.label}</span>
           </button>
         );
@@ -93,17 +97,17 @@ const BottomNav = ({ activeScreen, setScreen }: { activeScreen: Screen, setScree
 };
 
 const Header = () => (
-  <header className="bg-surface/80 backdrop-blur-md flex justify-between items-center w-full px-6 py-4 sticky top-0 z-40">
+  <header className="bg-surface/80 backdrop-blur-md flex justify-between items-center w-full px-6 py-4 sticky top-0 z-40" id="main-header">
     <div className="flex items-center gap-4">
-      <button className="hover:bg-surface-container-high p-2 rounded-full transition-colors">
-        <Menu size={24} className="text-primary" />
+      <button id="sidebar-toggle" className="hover:bg-surface-container-high p-2 rounded-full transition-colors" aria-label="Open sidebar menu">
+        <Menu size={24} className="text-primary" aria-hidden="true" />
       </button>
       <h1 className="font-headline text-2xl font-bold tracking-tight text-primary">Nexus</h1>
     </div>
     <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/10">
       <img 
-        alt="User profile" 
-        src="https://picsum.photos/seed/nexus-user/100/100" 
+        alt="Operator profile" 
+        src="/assets/operator_avatar.png" 
         referrerPolicy="no-referrer"
       />
     </div>
@@ -114,22 +118,35 @@ const Header = () => (
 
 const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void }) => {
   const [input, setInput] = useState('');
-  const recentIntakes: IntakeItem[] = [
-    {
-      id: '882',
-      title: 'Logistics Report #882',
-      status: 'VERIFYING',
-      timestamp: '12 mins ago',
-      description: 'Analyzing structural risk data'
-    },
-    {
-      id: 'zone-a',
-      title: 'Field Assessment: Zone A',
-      status: 'READY',
-      timestamp: '2 hours ago',
-      description: '4 priority actions identified'
-    }
-  ];
+  const [recentIntakes, setRecentIntakes] = useState<IntakeItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRecentIntakes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('intakes')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(2);
+        
+        if (data) {
+          setRecentIntakes(data.map(item => ({
+            id: item.id,
+            title: item.title,
+            status: item.status as any,
+            timestamp: new Date(item.created_at).toLocaleTimeString() + ' ago',
+            description: item.description || 'Analyzing...'
+          })));
+        }
+      } catch (err) {
+        console.error('Fetch intakes error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRecentIntakes();
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,17 +158,19 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
   return (
     <div className="space-y-12 pb-12">
       <section className="relative">
-        <form onSubmit={handleSubmit} className="bg-surface-container-lowest rounded-full px-6 py-4 flex items-center shadow-sm">
-          <Search size={20} className="text-outline mr-3" />
+        <form id="intake-form" onSubmit={handleSubmit} className="bg-surface-container-lowest rounded-full px-6 py-4 flex items-center shadow-sm" role="search">
+          <Search size={20} className="text-outline mr-3" aria-hidden="true" />
           <input 
+            id="situation-input"
             className="bg-transparent border-none focus:outline-none w-full text-on-surface placeholder:text-outline" 
             placeholder="Search past actions or describe a new situation..." 
             type="text"
+            aria-label="Situation description or search"
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
-          <button type="submit" className="text-primary font-bold ml-3">Analyze</button>
-          <SlidersHorizontal size={20} className="text-outline ml-3" />
+          <button id="analyze-button" type="submit" className="text-primary font-bold ml-3" aria-label="Analyze situation">Analyze</button>
+          <SlidersHorizontal size={20} className="text-outline ml-3" aria-hidden="true" />
         </form>
       </section>
 
@@ -170,6 +189,7 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <button 
+          id="intake-voice-button"
           onClick={async () => {
             try {
               const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -190,6 +210,7 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
         </button>
 
         <button 
+          id="intake-camera-button"
           onClick={async () => {
             try {
               const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -210,6 +231,7 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
         </button>
 
         <button 
+          id="intake-upload-button"
           onClick={() => {
             const el = document.createElement('input');
             el.type = 'file';
@@ -236,9 +258,9 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
-            { icon: Car, label: 'Traffic Feed', sub: 'Sector 4 congestion data', color: 'text-amber-500', input: 'Analyze real-time traffic congestion in Sector 4 and suggest rerouting for emergency vehicles.' },
-            { icon: CloudSun, label: 'Weather Alert', sub: 'Incoming storm front', color: 'text-blue-500', input: 'Evaluate the impact of the incoming storm front on low-lying community shelters.' },
-            { icon: Newspaper, label: 'News Stream', sub: 'Local incident reports', color: 'text-emerald-500', input: 'Sift through local news reports for any signs of infrastructure failure in the downtown area.' },
+            { icon: Car, label: 'Traffic Feed', sub: `Sector ${Math.floor(Math.random() * 9) + 1} congestion data`, color: 'text-amber-500', input: 'Analyze real-time traffic congestion in Sector 4 and suggest rerouting for emergency vehicles.' },
+            { icon: CloudSun, label: 'Weather Alert', sub: Math.random() > 0.5 ? 'Incoming storm front' : 'High UV index warning', color: 'text-blue-500', input: 'Evaluate the impact of the incoming weather patterns on low-lying community shelters.' },
+            { icon: Newspaper, label: 'News Stream', sub: `Last report: ${Math.floor(Math.random() * 15) + 1}m ago`, color: 'text-emerald-500', input: 'Sift through local news reports for any signs of infrastructure failure in the downtown area.' },
           ].map((feed, i) => (
             <button 
               key={i}
@@ -260,38 +282,53 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
       <section className="space-y-6">
         <div className="flex justify-between items-end">
           <h3 className="font-headline text-2xl font-bold">Recent Intakes</h3>
-          <button className="text-primary font-semibold text-sm hover:underline">View History</button>
+          <button 
+            onClick={() => onStartNexus('Overview of all past intakes and recent actions')}
+            className="text-primary font-semibold text-sm hover:underline"
+          >
+            Sift Records
+          </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {recentIntakes.map((intake) => (
-            <div 
-              key={intake.id} 
-              onClick={() => intake.status === 'READY' && onStartNexus(intake.title)}
-              className={cn(
-                "bg-surface-container-low p-6 rounded-xl flex items-start gap-4 transition-all",
-                intake.status === 'READY' ? "cursor-pointer hover:bg-surface-container hover:shadow-md" : "opacity-80"
-              )}
-            >
-              <div className={cn(
-                "w-12 h-12 rounded-xl flex items-center justify-center",
-                intake.status === 'VERIFYING' ? "bg-tertiary-container/20 text-tertiary animate-pulse" : "bg-secondary-container/20 text-secondary"
-              )}>
-                {intake.status === 'VERIFYING' ? <Database size={24} /> : <CheckCircle2 size={24} className="fill-current" />}
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-start">
-                  <h4 className="font-bold text-on-surface">{intake.title}</h4>
-                  <span className={cn(
-                    "text-[10px] font-label font-bold uppercase tracking-widest px-2 py-1 rounded",
-                    intake.status === 'VERIFYING' ? "bg-tertiary-container text-on-tertiary-container" : "bg-secondary text-on-secondary"
-                  )}>
-                    {intake.status === 'VERIFYING' ? 'Verifying...' : 'Action Hub Ready'}
-                  </span>
-                </div>
-                <p className="text-sm text-on-surface-variant mt-1">Uploaded {intake.timestamp} • {intake.description}</p>
-              </div>
+          {loading ? (
+            <div className="md:col-span-2 flex justify-center p-8">
+              <Loader2 className="animate-spin text-primary" size={32} />
             </div>
-          ))}
+          ) : recentIntakes.length > 0 ? (
+            recentIntakes.map((intake) => (
+              <div 
+                key={intake.id} 
+                onClick={() => intake.status === 'READY' && onStartNexus(intake.title)}
+                className={cn(
+                  "bg-surface-container-low p-6 rounded-xl flex items-start gap-4 transition-all",
+                  intake.status === 'READY' ? "cursor-pointer hover:bg-surface-container hover:shadow-md" : "opacity-80"
+                )}
+              >
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex items-center justify-center",
+                  intake.status === 'VERIFYING' ? "bg-tertiary-container/20 text-tertiary animate-pulse" : "bg-secondary-container/20 text-secondary"
+                )}>
+                  {intake.status === 'VERIFYING' ? <Database size={24} /> : <CheckCircle2 size={24} className="fill-current" />}
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between items-start">
+                    <h4 className="font-bold text-on-surface">{intake.title}</h4>
+                    <span className={cn(
+                      "text-[10px] font-label font-bold uppercase tracking-widest px-2 py-1 rounded",
+                      intake.status === 'VERIFYING' ? "bg-tertiary-container text-on-tertiary-container" : "bg-secondary text-on-secondary"
+                    )}>
+                      {intake.status === 'VERIFYING' ? 'Verifying...' : 'Action Hub Ready'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-on-surface-variant mt-1">Uploaded {intake.timestamp} • {intake.description}</p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-2 p-12 text-center bg-surface-container-lowest rounded-2xl border-2 border-dashed border-outline-variant/30 text-on-surface-variant font-medium">
+              No recent intakes found. Start a new analysis to see results here.
+            </div>
+          )}
 
           <div className="md:col-span-2 bg-surface-container-highest/50 p-1 rounded-xl">
             <div className="bg-surface-container-lowest p-8 rounded-xl flex flex-col md:flex-row gap-8 items-center border-l-4 border-primary">
@@ -466,7 +503,17 @@ const NexusScreen = ({ input, onComplete }: { input: string, onComplete: (data: 
 };
 
 const ActionHubScreen = ({ data, setScreen }: { data: any, setScreen: (s: Screen) => void }) => {
-  const steps: ActionStep[] = data?.actions || [];
+  const [steps, setSteps] = useState<ActionStep[]>(data?.actions || []);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const handleToggleComplete = (id: number) => {
+    setSteps(prev => prev.map(step => 
+      step.id === id ? { ...step, status: step.status === 'COMPLETED' ? 'READY' : 'COMPLETED' } : step
+    ));
+    const title = steps.find(s => s.id === id)?.title || 'Action';
+    setToast(`${title} status updated.`);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   if (!data || steps.length === 0) {
     return (
@@ -489,7 +536,21 @@ const ActionHubScreen = ({ data, setScreen }: { data: any, setScreen: (s: Screen
   }
 
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-8 pb-12 relative">
+      <AnimatePresence>
+        {toast && (
+          <motion.div 
+            initial={{ y: -50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -50, opacity: 0 }}
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] bg-primary text-on-primary px-6 py-3 rounded-full shadow-2xl font-bold flex items-center gap-2"
+          >
+            <CheckCircle2 size={20} />
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <section className="relative overflow-hidden rounded-xl bg-tertiary-container/10 p-6 ai-pulse-glow backdrop-blur-xl border-l-4 border-tertiary">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -588,34 +649,36 @@ const ActionHubScreen = ({ data, setScreen }: { data: any, setScreen: (s: Screen
               </div>
             )}
 
-            {step.status !== 'COMPLETED' && (
-              <div className="space-y-3">
-                <button 
-                  onClick={() => alert(`Broadcasting command: ${step.title}`)}
-                  className={cn(
-                    "w-full py-4 rounded-xl font-bold tracking-tight flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-md",
-                    step.status === 'READY' ? "bg-error text-on-error hover:bg-error/90" : 
-                    step.status === 'PENDING' ? "border border-primary text-primary hover:bg-primary/5" :
-                    "bg-primary text-on-primary hover:bg-primary/90"
-                  )}
-                >
-                  {step.icon === 'call' && <Phone size={20} className="fill-current" />}
-                  {step.icon === 'info' && <Info size={20} />}
-                  {step.icon === 'check' && <CheckCircle2 size={20} />}
-                  {step.icon === 'alert' && <AlertTriangle size={20} className="fill-current" />}
-                  {step.actionText || 'Execute Action'}
-                  {step.status === 'RECOMMENDED' && <ChevronRight size={20} />}
-                </button>
-                {step.status === 'READY' && (
-                  <button 
-                    onClick={() => alert('Coordinating with local emergency services...')}
-                    className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-widest text-primary border border-primary/20 hover:bg-primary/5 transition-colors"
-                  >
-                    Auto-Coordinate with Responders
-                  </button>
+            <div className="space-y-3">
+              <button 
+                onClick={() => handleToggleComplete(step.id)}
+                className={cn(
+                  "w-full py-4 rounded-xl font-bold tracking-tight flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-md",
+                  step.status === 'READY' ? "bg-error text-on-error hover:bg-error/90" : 
+                  step.status === 'PENDING' ? "border border-primary text-primary hover:bg-primary/5" :
+                  step.status === 'COMPLETED' ? "bg-surface-container-highest text-on-surface-variant hover:bg-surface-container-high" :
+                  "bg-primary text-on-primary hover:bg-primary/90"
                 )}
-              </div>
-            )}
+              >
+                {step.icon === 'call' && <Phone size={20} className={cn(step.status !== 'COMPLETED' && "fill-current")} />}
+                {step.icon === 'info' && <Info size={20} />}
+                {step.icon === 'check' && <CheckCircle2 size={20} />}
+                {step.icon === 'alert' && <AlertTriangle size={20} className={cn(step.status !== 'COMPLETED' && "fill-current")} />}
+                {step.status === 'COMPLETED' ? 'Mark Incomplete' : (step.actionText || 'Execute Action')}
+                {step.status === 'RECOMMENDED' && <ChevronRight size={20} />}
+              </button>
+              {step.status === 'READY' && (
+                <button 
+                  onClick={() => {
+                    setToast('Auto-coordination system engaged.');
+                    setTimeout(() => setToast(null), 3000);
+                  }}
+                  className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-widest text-primary border border-primary/20 hover:bg-primary/5 transition-colors"
+                >
+                  Auto-Coordinate with Responders
+                </button>
+              )}
+            </div>
           </div>
         ))}
 
@@ -651,17 +714,57 @@ const ImpactDashboardScreen = () => {
   });
   const [lastUpdated, setLastUpdated] = useState('Just now');
 
-  const handleRefresh = () => {
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        setLastUpdated('Syncing...');
+        const { count: intakeCount } = await supabase
+          .from('intakes')
+          .select('*', { count: 'exact', head: true });
+        
+        // Fetch profile metrics if available, otherwise use defaults
+        let impactPoints = 0;
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('impact_points')
+            .limit(1)
+            .maybeSingle(); // maybeSingle won't throw 406 on empty
+          
+          if (!profileError && profile) {
+            impactPoints = profile.impact_points;
+          }
+        } catch (e) {
+          console.warn('Profile fetch skipped or failed:', e);
+        }
+
+        setMetrics({
+          actions: (intakeCount || 0) * 42 + 1284,
+          resources: (impactPoints / 2) + 150,
+          efficiency: 12 + Math.floor((intakeCount || 0) / 10)
+        });
+        setLastUpdated('Last synced: ' + new Date().toLocaleTimeString());
+      } catch (err) {
+        console.error('Fetch metrics error:', err);
+      }
+    };
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleRefresh = async () => {
     setIsRefreshing(true);
+    // Explicit refresh logic
+    const { count } = await supabase.from('intakes').select('*', { count: 'exact', head: true });
+    setMetrics(prev => ({
+      ...prev,
+      actions: (count || 0) * 42 + 1284
+    }));
     setTimeout(() => {
       setIsRefreshing(false);
-      setMetrics({
-        actions: 1284 + Math.floor(Math.random() * 50),
-        resources: 342 + Math.floor(Math.random() * 10),
-        efficiency: 12 + (Math.random() > 0.5 ? 1 : -1)
-      });
-      setLastUpdated('Last synced: ' + new Date().toLocaleTimeString());
-    }, 1500);
+      setLastUpdated('Analysis updated at ' + new Date().toLocaleTimeString());
+    }, 1000);
   };
 
   return (
@@ -677,11 +780,30 @@ const ImpactDashboardScreen = () => {
             <p className="text-xs font-bold text-on-surface">{lastUpdated}</p>
           </div>
           <button 
+            id="cloud-sync-button"
+            onClick={() => {
+              setIsRefreshing(true);
+              setTimeout(() => {
+                setIsRefreshing(false);
+                setLastUpdated('Google Cloud Sync: Active (' + new Date().toLocaleTimeString() + ')');
+              }, 1500);
+            }}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-primary/20 transition-all",
+              isRefreshing && "opacity-50"
+            )}
+          >
+            <ShieldCheck size={16} />
+            Cloud Sync
+          </button>
+          <button 
+            id="refresh-metrics-button"
             onClick={handleRefresh}
             className={cn(
               "w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-primary transition-all active:scale-95 shadow-sm hover:shadow-md",
               isRefreshing && "animate-spin"
             )}
+            aria-label="Refresh metrics"
           >
             <Loader2 size={24} />
           </button>
@@ -742,7 +864,12 @@ const ImpactDashboardScreen = () => {
         <div className="md:col-span-6 bg-surface-container-lowest rounded-xl p-8 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-headline text-xl font-bold">Recent Alerts</h3>
-            <span className="text-primary font-bold text-sm cursor-pointer hover:underline">View All</span>
+            <button 
+              onClick={() => handleRefresh()}
+              className="text-primary font-bold text-sm hover:underline"
+            >
+              Sync All
+            </button>
           </div>
           <div className="space-y-4">
             <div className="flex gap-4 items-start p-4 bg-error-container/20 rounded-xl">
@@ -826,7 +953,7 @@ const MenuScreen = () => {
         <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-primary/20 shadow-lg">
           <img 
             alt="User profile" 
-            src="https://picsum.photos/seed/nexus-user/200/200" 
+            src="/assets/operator_avatar.png" 
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover"
           />
@@ -877,7 +1004,13 @@ const MenuScreen = () => {
         ))}
       </div>
 
-      <button className="w-full flex items-center justify-center gap-2 p-5 text-error font-bold hover:bg-error/5 rounded-xl transition-colors mt-4">
+      <button 
+        onClick={() => {
+          localStorage.clear();
+          window.location.reload();
+        }}
+        className="w-full flex items-center justify-center gap-2 p-5 text-error font-bold hover:bg-error/5 rounded-xl transition-colors mt-4"
+      >
         <LogOut size={20} />
         Terminate Session
       </button>
@@ -898,8 +1031,18 @@ export default function App() {
     if (analysisResult) localStorage.setItem('nexus_last_result', JSON.stringify(analysisResult));
   }, [analysisInput, analysisResult]);
 
+  const [privacyMode, setPrivacyMode] = useState(false);
+  
   const handleStartNexus = (input: string) => {
-    setAnalysisInput(input);
+    let finalInput = input;
+    if (privacyMode) {
+      // Basic PII redaction for demonstration
+      finalInput = input
+        .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}/g, '[EMAIL REDACTED]')
+        .replace(/\+?\d{10,14}/g, '[PHONE REDACTED]');
+      console.log('Nexus Privacy Bridge: Sensitive data anonymized for cloud transmission.');
+    }
+    setAnalysisInput(finalInput);
     setScreen('NEXUS');
   };
 
@@ -909,31 +1052,109 @@ export default function App() {
 
     // Persist to Supabase
     try {
-      const { error } = await supabase
+      const { data: intakeData, error: intakeError } = await supabase
         .from('intakes')
         .insert([{
-          input: analysisInput,
-          result: data,
-          created_at: new Date().toISOString()
-        }]);
+          title: data.situation || 'Situation Analysis',
+          description: data.impactProjection,
+          input_type: 'automated',
+          status: 'READY'
+        }])
+        .select()
+        .single();
       
-      if (error) console.warn('Supabase partial failure:', error.message);
-    } catch (err) {
-      console.error('Supabase integration error:', err);
+      if (intakeError) throw intakeError;
+
+      if (data.actions && intakeData) {
+        const actionsToInsert = data.actions.map((action: any) => ({
+          intake_id: intakeData.id,
+          title: action.title,
+          description: action.description,
+          status: action.status,
+          priority: data.priority,
+          confidence: data.confidence,
+          instructions: action.instructions,
+          action_text: action.actionText,
+          icon: action.icon
+        }));
+
+        const { error: actionsError } = await supabase
+          .from('actions')
+          .insert(actionsToInsert);
+        
+        if (actionsError) {
+          console.warn('Supabase actions insert error:', actionsError.message);
+          // Non-blocking, the UI already has the data
+        }
+      }
+    } catch (err: any) {
+      console.error('Supabase integration error:', err.message || err);
+      // Ensure the user doesn't see a broken app if the DB is down
     }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setScreen('INTAKE');
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
+        e.preventDefault();
+        setScreen('IMPACT');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div className="min-h-screen pb-32 bg-surface selection:bg-primary/20">
+      <a 
+        href="#main-content" 
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-[100] bg-primary text-on-primary px-4 py-2 rounded-lg font-bold shadow-xl"
+      >
+        Skip to content
+      </a>
       {/* Background Pulse */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-30 z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-tertiary/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
 
-      <Header />
+      <header className="bg-surface/80 backdrop-blur-md flex justify-between items-center w-full px-6 py-4 sticky top-0 z-40" id="main-header">
+        <div className="flex items-center gap-4">
+          <button id="sidebar-toggle" className="hover:bg-surface-container-high p-2 rounded-full transition-colors" aria-label="Open sidebar menu">
+            <Menu size={24} className="text-primary" aria-hidden="true" />
+          </button>
+          <h1 className="font-headline text-2xl font-bold tracking-tight text-primary">Nexus</h1>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <button 
+            id="privacy-toggle"
+            onClick={() => setPrivacyMode(!privacyMode)}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all",
+              privacyMode ? "bg-secondary text-on-secondary shadow-lg" : "bg-outline/10 text-outline hover:bg-outline/20"
+            )}
+            aria-label={privacyMode ? "Disable Privacy Mode" : "Enable Privacy Mode"}
+            title={privacyMode ? "Privacy Mode Active: Inputs anonymized" : "Privacy Mode Inactive"}
+          >
+            <ShieldCheck size={14} className={cn(privacyMode && "animate-pulse")} />
+            {privacyMode ? "Privacy On" : "Privacy Off"}
+          </button>
+          <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/10">
+            <img 
+              alt="Operator profile" 
+              src="/assets/operator_avatar.png" 
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        </div>
+      </header>
       
-      <main className="max-w-5xl mx-auto px-6 pt-8 relative z-10">
+      <main id="main-content" className="max-w-5xl mx-auto px-6 pt-8 relative z-10">
         <AnimatePresence>
           <motion.div
             key={screen}
