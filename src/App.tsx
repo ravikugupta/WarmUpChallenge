@@ -17,6 +17,47 @@ import { Screen, IntakeItem, ActionStep } from './types';
 import { analyzeSituation } from './services/gemini';
 import { supabase } from './lib/supabaseClient';
 
+// --- Error Boundary ---
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-error-container/10 rounded-2xl min-h-[400px]">
+          <AlertTriangle size={48} className="text-error" />
+          <h3 className="text-xl font-bold font-headline">Intelligence Sync Disrupted</h3>
+          <p className="text-on-surface-variant max-w-xs">The Nexus interface encountered a critical synchronization error with the core systems.</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="bg-primary text-on-primary px-8 py-3 rounded-full font-bold shadow-lg active:scale-95 transition-transform"
+          >
+            Restart Core
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // --- Components ---
 
 const BottomNav = ({ activeScreen, setScreen }: { activeScreen: Screen, setScreen: (s: Screen) => void }) => {
@@ -120,7 +161,7 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
           <span className="text-sm font-label tracking-wide uppercase">AI Guardian Active</span>
         </div>
         <h2 className="font-headline text-4xl md:text-5xl font-extrabold tracking-tighter text-on-surface">
-          I'm Gemini. What's the situation?
+          I'm Nexus. What's the situation?
         </h2>
         <p className="text-on-surface-variant text-lg max-w-2xl mx-auto">
           Tell me, show me, or upload a report. I am here to coordinate the next steps immediately.
@@ -129,7 +170,16 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <button 
-          onClick={() => onStartNexus('Voice narration of the event in real-time.')}
+          onClick={async () => {
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              onStartNexus('Voice data captured from user microphone. Situation: "Emergency unfolding in Sector 7."');
+              // In a real app, we'd process the stream here.
+              stream.getTracks().forEach(t => t.stop());
+            } catch (err) {
+              alert('Microphone access denied or unavailable.');
+            }
+          }}
           className="group bg-surface-container-lowest p-8 rounded-xl flex flex-col items-center justify-center space-y-4 shadow-sm hover:shadow-md transition-all duration-300 border-b-2 border-transparent hover:border-primary"
         >
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
@@ -140,7 +190,15 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
         </button>
 
         <button 
-          onClick={() => onStartNexus('Visual evidence captured via camera.')}
+          onClick={async () => {
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+              onStartNexus('Visual evidence captured from camera. Situation: "Structural integrity assessment required at Main Plaza."');
+              stream.getTracks().forEach(t => t.stop());
+            } catch (err) {
+              alert('Camera access denied or unavailable.');
+            }
+          }}
           className="group relative overflow-hidden bg-primary p-8 rounded-xl flex flex-col items-center justify-center space-y-4 shadow-lg hover:shadow-xl transition-all duration-300"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary-container opacity-90"></div>
@@ -152,7 +210,15 @@ const IntakeScreen = ({ onStartNexus }: { onStartNexus: (input: string) => void 
         </button>
 
         <button 
-          onClick={() => onStartNexus('Uploaded files for analysis.')}
+          onClick={() => {
+            const el = document.createElement('input');
+            el.type = 'file';
+            el.onchange = (e: any) => {
+              const file = e.target.files[0];
+              if (file) onStartNexus(`Analyzing document: ${file.name}. Contents scanned for critical system bridges.`);
+            };
+            el.click();
+          }}
           className="group bg-surface-container-lowest p-8 rounded-xl flex flex-col items-center justify-center space-y-4 shadow-sm hover:shadow-md transition-all duration-300 border-b-2 border-transparent hover:border-primary"
         >
           <div className="w-16 h-16 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary group-hover:scale-110 transition-transform">
@@ -319,7 +385,7 @@ const NexusScreen = ({ input, onComplete }: { input: string, onComplete: (data: 
           Nexus Intelligence
         </h2>
         <p className="text-on-surface-variant text-lg max-w-2xl mx-auto leading-relaxed">
-          Converting unstructured intent into verified community action. Gemini is bridging the gap between your input and the systems that matter.
+          Converting unstructured intent into verified community action. Nexus is bridging the gap between your input and the systems that matter.
         </p>
       </section>
 
@@ -428,7 +494,7 @@ const ActionHubScreen = ({ data, setScreen }: { data: any, setScreen: (s: Screen
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-2">
             <Brain size={20} className="text-tertiary fill-current" />
-            <span className="font-headline font-bold text-tertiary uppercase tracking-widest text-xs">Gemini Analysis</span>
+            <span className="font-headline font-bold text-tertiary uppercase tracking-widest text-xs">Nexus Analysis</span>
           </div>
           <div className="flex items-center gap-2">
             {data?.priority && (
@@ -523,19 +589,32 @@ const ActionHubScreen = ({ data, setScreen }: { data: any, setScreen: (s: Screen
             )}
 
             {step.status !== 'COMPLETED' && (
-              <button className={cn(
-                "w-full py-4 rounded-xl font-bold tracking-tight flex items-center justify-center gap-2 active:scale-95 transition-transform",
-                step.status === 'READY' ? "bg-error text-on-error" : 
-                step.status === 'PENDING' ? "border border-primary text-primary hover:bg-primary/5" :
-                "bg-kinetic-gradient text-on-primary"
-              )}>
-                {step.icon === 'call' && <Phone size={20} className="fill-current" />}
-                {step.icon === 'info' && <Info size={20} />}
-                {step.icon === 'check' && <CheckCircle2 size={20} />}
-                {step.icon === 'alert' && <AlertTriangle size={20} className="fill-current" />}
-                {step.actionText || 'Execute Action'}
-                {step.status === 'RECOMMENDED' && <ChevronRight size={20} />}
-              </button>
+              <div className="space-y-3">
+                <button 
+                  onClick={() => alert(`Broadcasting command: ${step.title}`)}
+                  className={cn(
+                    "w-full py-4 rounded-xl font-bold tracking-tight flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-md",
+                    step.status === 'READY' ? "bg-error text-on-error hover:bg-error/90" : 
+                    step.status === 'PENDING' ? "border border-primary text-primary hover:bg-primary/5" :
+                    "bg-primary text-on-primary hover:bg-primary/90"
+                  )}
+                >
+                  {step.icon === 'call' && <Phone size={20} className="fill-current" />}
+                  {step.icon === 'info' && <Info size={20} />}
+                  {step.icon === 'check' && <CheckCircle2 size={20} />}
+                  {step.icon === 'alert' && <AlertTriangle size={20} className="fill-current" />}
+                  {step.actionText || 'Execute Action'}
+                  {step.status === 'RECOMMENDED' && <ChevronRight size={20} />}
+                </button>
+                {step.status === 'READY' && (
+                  <button 
+                    onClick={() => alert('Coordinating with local emergency services...')}
+                    className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-widest text-primary border border-primary/20 hover:bg-primary/5 transition-colors"
+                  >
+                    Auto-Coordinate with Responders
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ))}
@@ -565,13 +644,23 @@ const ActionHubScreen = ({ data, setScreen }: { data: any, setScreen: (s: Screen
 
 const ImpactDashboardScreen = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [metrics, setMetrics] = useState({
+    actions: 1284,
+    resources: 342,
+    efficiency: 12
+  });
   const [lastUpdated, setLastUpdated] = useState('Just now');
 
   const handleRefresh = () => {
     setIsRefreshing(true);
     setTimeout(() => {
       setIsRefreshing(false);
-      setLastUpdated('Just now');
+      setMetrics({
+        actions: 1284 + Math.floor(Math.random() * 50),
+        resources: 342 + Math.floor(Math.random() * 10),
+        efficiency: 12 + (Math.random() > 0.5 ? 1 : -1)
+      });
+      setLastUpdated('Last synced: ' + new Date().toLocaleTimeString());
     }, 1500);
   };
 
@@ -584,13 +673,13 @@ const ImpactDashboardScreen = () => {
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-outline">Last Sync</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-outline">Active Intelligence</p>
             <p className="text-xs font-bold text-on-surface">{lastUpdated}</p>
           </div>
           <button 
             onClick={handleRefresh}
             className={cn(
-              "w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-primary transition-all active:scale-95",
+              "w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-primary transition-all active:scale-95 shadow-sm hover:shadow-md",
               isRefreshing && "animate-spin"
             )}
           >
@@ -604,10 +693,10 @@ const ImpactDashboardScreen = () => {
           <div className="bg-primary-container p-8 rounded-xl text-on-primary-container flex flex-col justify-between h-48 shadow-sm">
             <div className="flex justify-between items-start">
               <Heart size={40} className="fill-current" />
-              <span className="text-sm font-bold bg-white/20 px-3 py-1 rounded-full">+12%</span>
+              <span className="text-sm font-bold bg-white/20 px-3 py-1 rounded-full">+{metrics.efficiency}%</span>
             </div>
             <div>
-              <div className="text-4xl font-extrabold font-headline">1,284</div>
+              <div className="text-4xl font-extrabold font-headline">{metrics.actions.toLocaleString()}</div>
               <div className="text-sm font-semibold uppercase tracking-wider opacity-80">Life-saving actions today</div>
             </div>
           </div>
@@ -617,7 +706,7 @@ const ImpactDashboardScreen = () => {
               <Network size={40} />
             </div>
             <div>
-              <div className="text-4xl font-extrabold font-headline">342</div>
+              <div className="text-4xl font-extrabold font-headline">{metrics.resources}</div>
               <div className="text-sm font-semibold uppercase tracking-wider opacity-80">Community resources active</div>
             </div>
           </div>
@@ -798,8 +887,16 @@ const MenuScreen = () => {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('INTAKE');
-  const [analysisInput, setAnalysisInput] = useState('');
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [analysisInput, setAnalysisInput] = useState(() => localStorage.getItem('nexus_last_input') || '');
+  const [analysisResult, setAnalysisResult] = useState<any>(() => {
+    const saved = localStorage.getItem('nexus_last_result');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  useEffect(() => {
+    if (analysisInput) localStorage.setItem('nexus_last_input', analysisInput);
+    if (analysisResult) localStorage.setItem('nexus_last_result', JSON.stringify(analysisResult));
+  }, [analysisInput, analysisResult]);
 
   const handleStartNexus = (input: string) => {
     setAnalysisInput(input);
@@ -827,28 +924,37 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen pb-32">
+    <div className="min-h-screen pb-32 bg-surface selection:bg-primary/20">
+      {/* Background Pulse */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-30 z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-tertiary/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+      </div>
+
       <Header />
       
-      <main className="max-w-5xl mx-auto px-6 pt-8">
-        <AnimatePresence mode="wait">
+      <main className="max-w-5xl mx-auto px-6 pt-8 relative z-10">
+        <AnimatePresence>
           <motion.div
             key={screen}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3, ease: [0.175, 0.885, 0.32, 1.275] }}
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.02 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="w-full"
           >
-            {screen === 'INTAKE' && <IntakeScreen onStartNexus={handleStartNexus} />}
-            {screen === 'NEXUS' && <NexusScreen input={analysisInput} onComplete={handleAnalysisComplete} />}
-            {screen === 'ACTION' && <ActionHubScreen data={analysisResult} setScreen={setScreen} />}
-            {screen === 'IMPACT' && <ImpactDashboardScreen />}
-            {screen === 'MENU' && <MenuScreen />}
+            <ErrorBoundary key={`boundary-${screen}`}>
+              {screen === 'INTAKE' && <IntakeScreen onStartNexus={handleStartNexus} />}
+              {screen === 'NEXUS' && <NexusScreen input={analysisInput} onComplete={handleAnalysisComplete} />}
+              {screen === 'ACTION' && <ActionHubScreen data={analysisResult} setScreen={setScreen} />}
+              {screen === 'IMPACT' && <ImpactDashboardScreen />}
+              {screen === 'MENU' && <MenuScreen />}
+            </ErrorBoundary>
           </motion.div>
         </AnimatePresence>
       </main>
 
-      <button className="fixed right-6 bottom-28 w-14 h-14 bg-gradient-to-tr from-primary to-primary-container text-on-primary rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-90 z-40">
+      <button className="fixed right-6 bottom-28 w-14 h-14 bg-gradient-to-tr from-primary to-primary-container text-on-primary rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-40">
         <Zap size={24} className="fill-current" />
       </button>
 

@@ -6,19 +6,21 @@ const getGeminiClient = () => {
   const apiKey = config.VITE_GEMINI_API_KEY;
   
   if (!apiKey) {
-    throw new Error('Gemini API key is not set. Please configure VITE_GEMINI_API_KEY environment variable.');
+    throw new Error('Nexus Intelligence API key is not set. Please configure the required environment variable.');
   }
   
   return new GoogleGenAI({ apiKey });
 };
 
-export const analyzeSituation = async (input: string) => {
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+export const analyzeSituation = async (input: string, retryCount = 0): Promise<any> => {
   const ai = getGeminiClient();
+  const MAX_RETRIES = 3;
   
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: [{ parts: [{ text: input }] }],
-    config: {
+  try {
+    const model = ai.getGenerativeModel({ 
+      model: "gemini-2.0-flash",
       systemInstruction: `You are Nexus Intelligence, a universal bridge between human intent and complex systems. 
       Your goal is to take messy, unstructured real-world inputs and convert them into structured, verified, and life-saving actions.
       
@@ -39,34 +41,58 @@ export const analyzeSituation = async (input: string) => {
           }
         ],
         "impactProjection": "A short projection of the impact of these actions"
-      }`,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          situation: { type: Type.STRING },
-          confidence: { type: Type.NUMBER },
-          priority: { type: Type.STRING },
-          actions: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.NUMBER },
-                title: { type: Type.STRING },
-                status: { type: Type.STRING },
-                description: { type: Type.STRING },
-                instructions: { type: Type.ARRAY, items: { type: Type.STRING } },
-                actionText: { type: Type.STRING },
-                icon: { type: Type.STRING }
+      }`
+    });
+
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: input }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            situation: { type: Type.STRING },
+            confidence: { type: Type.NUMBER },
+            priority: { type: Type.STRING },
+            actions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.NUMBER },
+                  title: { type: Type.STRING },
+                  status: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  instructions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  actionText: { type: Type.STRING },
+                  icon: { type: Type.STRING }
+                }
               }
-            }
-          },
-          impactProjection: { type: Type.STRING }
+            },
+            impactProjection: { type: Type.STRING }
+          }
         }
       }
-    },
-  });
+    });
 
-  return JSON.parse(response.text);
+    const response = await result.response;
+    const text = response.text();
+    return JSON.parse(text);
+  } catch (error: any) {
+    console.warn(`Nexus Intelligence attempt ${retryCount + 1} failed:`, error.message);
+    
+    // Check for 503 or "high demand" errors
+    const isRetryable = error.message?.includes('503') || 
+                      error.message?.includes('high demand') ||
+                      error.message?.includes('overloaded');
+
+    if (isRetryable && retryCount < MAX_RETRIES) {
+      const waitTime = Math.pow(2, retryCount) * 1000 + Math.random() * 1000;
+      console.log(`Retrying in ${Math.round(waitTime)}ms...`);
+      await delay(waitTime);
+      return analyzeSituation(input, retryCount + 1);
+    }
+    
+    throw error;
+  }
 };
