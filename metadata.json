@@ -1,0 +1,5 @@
+{
+  "name": "Nexus - Universal Bridge",
+  "description": "A Gemini-powered app that acts as a universal bridge between human intent and complex systems, converting unstructured inputs into structured, life-saving actions.",
+  "requestFramePermissions": ["camera", "microphone", "geolocation"]
+}
